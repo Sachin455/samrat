@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% from "_macros.html" import txn_table with context %}
+{% block title %}{{ upload.filename }}{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="row between">
+    <div>
+      <h1>{{ upload.filename }}</h1>
+      <p class="muted">Uploaded {{ upload.created_at.replace("T", " ") }} · {{ upload.row_count }} row(s) imported
+        {% if upload.target_user_id %} · for user {{ upload.target_user_id }}{% endif %}</p>
+    </div>
+    <form method="post" action="{{ url_for('admin.delete_upload', upload_id=upload.id) }}" class="inline"
+          onsubmit="return confirm('Delete this upload and all {{ rows|length }} of its transactions?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="danger-btn">Delete upload</button>
+    </form>
+  </div>
+  {{ txn_table(rows, show_user=True, admin=True, next=request.path, empty="All transactions from this upload have been deleted.") }}
+</section>
+{% endblock %}

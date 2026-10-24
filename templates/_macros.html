@@ -1,0 +1,44 @@
+{% macro txn_table(rows, show_user=False, admin=False, next=None, empty="No transactions yet.") %}
+{% if rows %}
+<div class="table-wrap">
+<table>
+  <thead><tr>
+    <th>Date</th>{% if show_user %}<th>User ID</th>{% endif %}<th>Description</th><th>Type</th><th>Reference</th><th class="num">Amount</th>{% if admin %}<th></th>{% endif %}
+  </tr></thead>
+  <tbody>
+  {% for t in rows %}
+    <tr>
+      <td class="nowrap">{{ t.txn_date or "—" }}</td>
+      {% if show_user %}<td><a href="{{ url_for('admin.user_detail', user_id=t.user_id) }}">{{ t.user_id }}</a></td>{% endif %}
+      <td>{{ t.description }}</td>
+      <td><span class="pill {{ 'debit' if t.txn_type.lower().startswith(('d', 'withdraw')) else 'credit' if t.txn_type else '' }}">{{ t.txn_type or "—" }}</span></td>
+      <td>{{ t.reference }}</td>
+      <td class="num">{{ t.amount_cents | money }}</td>
+      {% if admin %}
+      <td class="num nowrap">
+        <a href="{{ url_for('admin.edit_transaction', txn_id=t.id, next=next) }}">Edit</a>
+        <form method="post" action="{{ url_for('admin.delete_transaction', txn_id=t.id, next=next) }}" class="inline"
+              onsubmit="return confirm('Delete this transaction?')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="link danger">Delete</button>
+        </form>
+      </td>
+      {% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="muted">{{ empty }}</p>
+{% endif %}
+{% endmacro %}
+
+{% macro summary_cards(summary) %}
+<div class="stats">
+  <div class="stat"><span>Transactions</span><strong>{{ summary.count }}</strong></div>
+  <div class="stat"><span>Total credits</span><strong class="credit-text">{{ summary.credits | money }}</strong></div>
+  <div class="stat"><span>Total debits</span><strong class="debit-text">{{ summary.debits | money }}</strong></div>
+  <div class="stat"><span>Net</span><strong>{{ (summary.credits - summary.debits) | money }}</strong></div>
+</div>
+{% endmacro %}

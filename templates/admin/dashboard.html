@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "_macros.html" import txn_table, summary_cards with context %}
+{% block title %}Admin dashboard{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="row between">
+    <h1>Admin dashboard</h1>
+    <div class="row">
+      <a class="button secondary" href="{{ url_for('admin.users') }}">Manage users ({{ user_count }})</a>
+      <a class="button" href="{{ url_for('admin.upload') }}">Upload Excel</a>
+    </div>
+  </div>
+  {{ summary_cards(summary) }}
+</section>
+<section class="card">
+  <div class="row between">
+    <h2>Recently added transactions</h2>
+    <a href="{{ url_for('admin.transactions') }}">View all →</a>
+  </div>
+  {{ txn_table(latest, show_user=True, admin=True, next=request.path) }}
+</section>
+<section class="card">
+  <h2>Recent uploads</h2>
+  {% if uploads %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>File</th><th>For user</th><th>Uploaded</th><th class="num">Rows</th></tr></thead>
+    <tbody>
+    {% for u in uploads %}
+      <tr>
+        <td><a href="{{ url_for('admin.upload_detail', upload_id=u.id) }}">{{ u.filename }}</a></td>
+        <td>{{ u.target_user_id or "Per row (User ID column)" }}</td>
+        <td>{{ u.created_at.replace("T", " ") }}</td>
+        <td class="num">{{ u.row_count }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="muted">No uploads yet.</p>{% endif %}
+</section>
+{% endblock %}

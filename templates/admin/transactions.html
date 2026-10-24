@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "_macros.html" import txn_table with context %}
+{% block title %}All transactions{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="row between">
+    <h1>All transactions ({{ total }})</h1>
+    <form method="get" class="row">
+      <input name="q" value="{{ q }}" placeholder="Filter by user ID" inputmode="numeric" aria-label="Filter by user ID">
+      <button type="submit" class="secondary">Filter</button>
+      {% if q %}<a href="{{ url_for('admin.transactions') }}">Clear</a>{% endif %}
+    </form>
+  </div>
+  {{ txn_table(rows, show_user=True, admin=True, next=request.full_path, empty="No transactions match.") }}
+  {% if pages > 1 %}
+  <div class="row pager">
+    {% if page > 1 %}<a href="{{ url_for('admin.transactions', q=q, page=page-1) }}">← Previous</a>{% endif %}
+    <span class="muted">Page {{ page }} of {{ pages }}</span>
+    {% if page < pages %}<a href="{{ url_for('admin.transactions', q=q, page=page+1) }}">Next →</a>{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

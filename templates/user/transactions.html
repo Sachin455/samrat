@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% from "_macros.html" import txn_table, summary_cards with context %}
+{% block title %}All transactions{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="row between">
+    <h1>All transactions</h1>
+    <a class="button" href="{{ url_for('user.transactions_pdf', **{'from': filters['from'], 'to': filters['to']}) }}">Download PDF</a>
+  </div>
+  <form method="get" class="row filters">
+    <label class="inline-label">From <input type="date" name="from" value="{{ filters['from'] }}"></label>
+    <label class="inline-label">To <input type="date" name="to" value="{{ filters['to'] }}"></label>
+    <button type="submit" class="secondary">Filter</button>
+    {% if filters['from'] or filters['to'] %}<a href="{{ url_for('user.transactions') }}">Clear</a>{% endif %}
+  </form>
+  {{ summary_cards(summary) }}
+  {{ txn_table(rows, empty="No transactions match.") }}
+</section>
+{% endblock %}

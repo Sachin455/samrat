@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "_macros.html" import txn_table, summary_cards with context %}
+{% block title %}User {{ user.user_id }}{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="row between">
+    <div>
+      <h1>User {{ user.user_id }}</h1>
+      <p class="muted">Added {{ user.created_at.replace("T", " ") }} ·
+        Last login {{ user.last_login.replace("T", " ") if user.last_login else "never" }} ·
+        {{ "Still on first-time password" if user.must_change_password else "Has set own password" }}</p>
+    </div>
+    <div class="row">
+      <a class="button" href="{{ url_for('admin.user_pdf', user_id=user.user_id) }}">Download PDF</a>
+      <form method="post" action="{{ url_for('admin.reset_password', user_id=user.user_id) }}" class="inline"
+            onsubmit="return confirm('Reset this user\'s password to the first-time password?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="secondary">Reset password</button>
+      </form>
+      <form method="post" action="{{ url_for('admin.delete_user', user_id=user.user_id) }}" class="inline"
+            onsubmit="return confirm('Delete user {{ user.user_id }} and ALL their transactions? This cannot be undone.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="danger-btn">Delete user</button>
+      </form>
+    </div>
+  </div>
+  {{ summary_cards(summary) }}
+</section>
+
+<section class="card">
+  <h2>Add a transaction</h2>
+  <form method="post" action="{{ url_for('admin.new_transaction') }}" class="txn-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="user_id" value="{{ user.user_id }}">
+    <input type="hidden" name="from_user" value="1">
+    <label>Date <input type="date" name="txn_date" value="{{ today }}"></label>
+    <label class="wide">Description <input name="description" maxlength="500"></label>
+    <label>Type
+      <select name="txn_type"><option>Credit</option><option>Debit</option></select>
+    </label>
+    <label>Amount <input name="amount" required inputmode="decimal" placeholder="0.00"></label>
+    <label>Reference <input name="reference" maxlength="100"></label>
+    <button type="submit">Add</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Transactions</h2>
+  {{ txn_table(rows, admin=True, next=request.path) }}
+</section>
+{% endblock %}

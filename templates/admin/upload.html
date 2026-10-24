@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Upload transactions{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Upload transactions</h1>
+  <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Excel file (.xlsx) <input type="file" name="file" accept=".xlsx,.xlsm" required></label>
+    <label>Upload everything to one user ID <span class="muted">(optional)</span>
+      <input name="target_user_id" value="{{ form.get('target_user_id', '') }}" pattern="\d{9}" maxlength="9"
+             inputmode="numeric" placeholder="e.g. 100000001">
+      <small>Leave empty if the sheet has a <strong>User ID</strong> column saying who each row belongs to.</small>
+    </label>
+    <label class="check"><input type="checkbox" name="create_missing" value="1" {{ 'checked' if form.get('create_missing') }}>
+      Create user accounts for IDs that don't exist yet (with the first-time password)</label>
+    <button type="submit">Upload</button>
+  </form>
+</section>
+
+{% if result %}
+<section class="card">
+  <h2>Result</h2>
+  <p>{{ result.total }} row(s) read · {{ result.total - result.skipped|length }} uploaded · {{ result.skipped|length }} skipped</p>
+  {% if result.created %}
+  <p><strong>New users created:</strong> {{ result.created|join(", ") }}</p>
+  {% endif %}
+  {% if result.delivered %}
+  <h3>Uploaded to</h3>
+  <ul>{% for uid, count in result.delivered %}<li><a href="{{ url_for('admin.user_detail', user_id=uid) }}">{{ uid }}</a>: {{ count }} transaction(s)</li>{% endfor %}</ul>
+  {% endif %}
+  {% if result.skipped %}
+  <h3>Skipped rows</h3>
+  <table>
+    <thead><tr><th>Excel row</th><th>Reason</th></tr></thead>
+    <tbody>{% for line, reason in result.skipped %}<tr><td>{{ line }}</td><td>{{ reason }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Excel format</h2>
+  <p>The first row must be the header. <a href="{{ url_for('admin.template') }}">Download the template</a>.</p>
+  <table class="spec">
+    <thead><tr><th>Column</th><th>Required</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td>User ID</td><td>Yes, unless you fill in a user ID above</td><td>100000001</td></tr>
+      <tr><td>Amount</td><td>Yes (or separate Debit / Credit columns)</td><td>2500.00</td></tr>
+      <tr><td>Date</td><td>No</td><td>2026-10-24 or 24/10/2026</td></tr>
+      <tr><td>Description</td><td>No</td><td>Salary October</td></tr>
+      <tr><td>Type</td><td>No</td><td>Credit / Debit</td></tr>
+      <tr><td>Reference</td><td>No</td><td>TXN-0001</td></tr>
+    </tbody>
+  </table>
+  <p class="muted">Bank exports with <strong>Withdrawal</strong> and <strong>Deposit</strong> (or Debit / Credit) columns instead of Amount also work.</p>
+</section>
+{% endblock %}

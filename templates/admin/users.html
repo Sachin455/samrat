@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Users{% endblock %}
+{% block content %}
+<div class="grid-2">
+  <section class="card">
+    <h2>Add users</h2>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="add">
+      <label>9-digit user IDs
+        <textarea name="user_ids" rows="5" placeholder="100000001&#10;100000002, 100000003" required></textarea>
+        <small>One or many, separated by new lines, spaces or commas. Each new user gets the first-time password below.</small>
+      </label>
+      <button type="submit">Add users</button>
+    </form>
+  </section>
+  <section class="card">
+    <h2>First-time password</h2>
+    <p>New users log in with: <code class="big">{{ default_password }}</code></p>
+    <p class="muted">They must choose their own password on first login. Changing this only affects users added or reset afterwards.</p>
+    <form method="post" class="row">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="default_password">
+      <input name="default_password" required minlength="6" placeholder="New first-time password" aria-label="New first-time password">
+      <button type="submit" class="secondary">Update</button>
+    </form>
+  </section>
+</div>
+
+<section class="card">
+  <div class="row between">
+    <h1>Users ({{ users|length }})</h1>
+    <form method="get" class="row">
+      <input name="q" value="{{ q }}" placeholder="Search user ID" inputmode="numeric" aria-label="Search user ID">
+      <button type="submit" class="secondary">Search</button>
+    </form>
+  </div>
+  {% if users %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>User ID</th><th>Status</th><th class="num">Transactions</th><th>Latest transaction</th><th>Last login</th><th></th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td><a href="{{ url_for('admin.user_detail', user_id=u.user_id) }}"><strong>{{ u.user_id }}</strong></a></td>
+        <td>{% if u.must_change_password %}<span class="pill">First-time password</span>{% else %}<span class="pill credit">Active</span>{% endif %}</td>
+        <td class="num">{{ u.txn_count }}</td>
+        <td>{{ u.last_txn or "—" }}</td>
+        <td>{{ u.last_login.replace("T", " ") if u.last_login else "Never" }}</td>
+        <td class="num"><a href="{{ url_for('admin.user_detail', user_id=u.user_id) }}">Open →</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="muted">{{ "No users match." if q else "No users yet. Add 9-digit user IDs above." }}</p>{% endif %}
+</section>
+{% endblock %}

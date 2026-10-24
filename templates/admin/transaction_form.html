@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Edit transaction{% endblock %}
+{% block content %}
+<section class="card narrow wide-narrow">
+  <h1>Edit transaction #{{ txn.id }}</h1>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>User ID <input name="user_id" value="{{ form.user_id }}" required pattern="\d{9}" maxlength="9" inputmode="numeric">
+      <small>Change this to move the transaction to another user.</small></label>
+    <label>Date <input type="date" name="txn_date" value="{{ form.txn_date }}"></label>
+    <label>Description <input name="description" value="{{ form.description }}" maxlength="500"></label>
+    <label>Type <input name="txn_type" value="{{ form.txn_type }}" list="types" maxlength="30"></label>
+    <datalist id="types"><option value="Credit"><option value="Debit"></datalist>
+    <label>Amount <input name="amount" value="{{ form.amount }}" required inputmode="decimal"></label>
+    <label>Reference <input name="reference" value="{{ form.reference }}" maxlength="100"></label>
+    <div class="row">
+      <button type="submit">Save changes</button>
+      <a href="{{ request.args.get('next') or url_for('admin.transactions') }}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

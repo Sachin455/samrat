@@ -21,6 +21,7 @@ input, select { display: block; width: 100%; margin-top: 4px; padding: 8px 10px;
 button, .button { display: inline-block; padding: 8px 16px; font: inherit; font-weight: 600; color: #fff; background: var(--brand); border: 0; border-radius: 6px; cursor: pointer; text-decoration: none; }
 button:hover, .button:hover { background: var(--brand-dark); }
 button.link { background: none; padding: 0; color: #fff; font-weight: 400; text-decoration: underline; }
+button.link:hover { background: none; }
 form.inline { display: inline-flex; gap: 8px; align-items: center; margin: 0; }
 .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .row.between { justify-content: space-between; margin-bottom: 8px; }
@@ -37,3 +38,38 @@ tfoot td { font-weight: 700; border-top: 2px solid var(--brand); }
 .num { text-align: right; white-space: nowrap; }
 table.spec { width: auto; margin-bottom: 12px; }
 code { background: #eef1f5; padding: 1px 5px; border-radius: 4px; }
+
+/* --- admin portal, dashboards, forms --- */
+body.admin .topbar { background: #2d2f45; }
+.tag { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; background: #f0b429; color: #2d2f45; padding: 2px 6px; border-radius: 4px; vertical-align: middle; }
+textarea { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; font: inherit; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
+label.check { display: flex; gap: 8px; align-items: flex-start; font-weight: 400; }
+label.check input { width: auto; margin-top: 4px; }
+.inline-label { display: inline-flex; gap: 6px; align-items: center; margin: 0; font-weight: 400; }
+button.secondary, .button.secondary { background: #e8eef5; color: var(--brand); }
+button.secondary:hover, .button.secondary:hover { background: #d6e1ec; }
+.danger-btn { background: #b42318; }
+.danger-btn:hover { background: #8f1c13; }
+button.link.danger { color: #b42318; }
+button.link.plain { color: var(--muted); margin-top: 12px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 12px 0 16px; }
+.stat { background: #f6f8fb; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.stat span { display: block; font-size: 13px; color: var(--muted); }
+.stat strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+.credit-text { color: var(--ok); }
+.debit-text { color: var(--err); }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: #eef1f5; color: var(--muted); }
+.pill.credit { background: var(--ok-bg); color: var(--ok); }
+.pill.debit { background: var(--err-bg); color: var(--err); }
+.nowrap { white-space: nowrap; }
+.num, td { font-variant-numeric: tabular-nums; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0 20px; }
+.txn-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 12px; align-items: end; }
+.txn-form .wide { grid-column: span 2; }
+.txn-form button { margin-bottom: 14px; }
+.filters { margin-bottom: 8px; }
+.pager { justify-content: center; margin-top: 16px; }
+code.big { font-size: 16px; padding: 3px 8px; }
+.card.wide-narrow { max-width: 560px; }
+td form.inline { margin-left: 8px; }
+@media (max-width: 600px) { .txn-form .wide { grid-column: auto; } .topbar { padding: 12px 16px; } }
