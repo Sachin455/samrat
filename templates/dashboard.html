@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="row between">
+    <h1>Transactions sent to you</h1>
+    <div class="actions">
+      {% if senders %}
+      <form method="get" action="{{ url_for('received_pdf') }}" class="inline">
+        <select name="sender" aria-label="Filter by sender">
+          <option value="">All senders</option>
+          {% for s in senders %}<option value="{{ s }}">From {{ s }}</option>{% endfor %}
+        </select>
+        <button type="submit">Download PDF</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% if received %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Date</th><th>From</th><th>Description</th><th>Type</th><th>Reference</th><th class="num">Amount</th></tr></thead>
+    <tbody>
+    {% for t in received %}
+      <tr>
+        <td>{{ t.txn_date or "" }}</td>
+        <td>{{ t.sender }}</td>
+        <td>{{ t.description }}</td>
+        <td>{{ t.txn_type }}</td>
+        <td>{{ t.reference }}</td>
+        <td class="num">{{ t.amount_cents | money }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><td colspan="5">Total ({{ received|length }} transactions)</td><td class="num">{{ received_total | money }}</td></tr></tfoot>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">No one has sent you any transactions yet. Share your user ID <strong>{{ current_user.user_id }}</strong> with them.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <div class="row between">
+    <h2>Your uploads</h2>
+    <a class="button" href="{{ url_for('upload') }}">Upload Excel</a>
+  </div>
+  {% if uploads %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>File</th><th>Uploaded</th><th class="num">Transactions</th><th></th></tr></thead>
+    <tbody>
+    {% for u in uploads %}
+      <tr>
+        <td><a href="{{ url_for('upload_detail', upload_id=u.id) }}">{{ u.filename }}</a></td>
+        <td>{{ u.created_at.replace("T", " ") }}</td>
+        <td class="num">{{ u.row_count }}</td>
+        <td class="num"><a href="{{ url_for('upload_pdf', upload_id=u.id) }}">PDF</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">You haven't uploaded any transactions yet.</p>
+  {% endif %}
+</section>
+{% endblock %}
