@@ -38,6 +38,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 USER_ID_RE = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
 MIN_PASSWORD_LEN = 6
+# Werkzeug defaults to scrypt, which Python builds linked against LibreSSL
+# (e.g. macOS's stock Python 3.9) lack; PBKDF2 is available everywhere.
+PASSWORD_HASH_METHOD = "pbkdf2:sha256"
 MAX_ROWS = 5000
 
 # Accepted header spellings (lower-cased) for each column of the upload sheet.
@@ -369,7 +372,7 @@ def register_routes(app):
                 try:
                     cur = db.execute(
                         "INSERT INTO users (user_id, password_hash, created_at) VALUES (?, ?, ?)",
-                        (user_id, generate_password_hash(password), now_iso()),
+                        (user_id, generate_password_hash(password, method=PASSWORD_HASH_METHOD), now_iso()),
                     )
                     db.commit()
                 except sqlite3.IntegrityError:

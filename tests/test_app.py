@@ -69,6 +69,16 @@ def test_register_requires_unique_id(client):
     assert b"already taken" in resp.data
 
 
+def test_register_works_without_scrypt(client, monkeypatch):
+    import hashlib
+
+    # macOS's stock Python 3.9 is built against LibreSSL and has no hashlib.scrypt.
+    monkeypatch.delattr(hashlib, "scrypt", raising=False)
+    assert register(client, "alice").status_code == 302
+    logout(client)
+    assert login(client, "alice").status_code == 302
+
+
 def test_login_and_bad_password(client):
     register(client, "alice")
     logout(client)
