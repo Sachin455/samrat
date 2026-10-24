@@ -27,6 +27,8 @@ invalid amount are skipped, and the upload result lists each skipped row with th
 
 ## Running locally
 
+Requires Python 3.9 or newer.
+
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
