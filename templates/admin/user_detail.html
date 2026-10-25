@@ -1,11 +1,12 @@
 {% extends "base.html" %}
-{% from "_macros.html" import txn_table, summary_cards with context %}
+{% from "_macros.html" import txn_table, summary_cards, profile_card with context %}
 {% block title %}User {{ user.user_id }}{% endblock %}
 {% block content %}
 <section class="card">
   <div class="row between">
     <div>
-      <h1>User {{ user.user_id }}</h1>
+      <h1>{{ profile.full_name if profile else "User " ~ user.user_id }}</h1>
+      {% if profile %}<p class="muted">User ID {{ user.user_id }}</p>{% endif %}
       <p class="muted">Added {{ user.created_at.replace("T", " ") }} ·
         Last login {{ user.last_login.replace("T", " ") if user.last_login else "never" }} ·
         {{ "Still on first-time password" if user.must_change_password else "Has set own password" }}</p>
@@ -25,6 +26,21 @@
     </div>
   </div>
   {{ summary_cards(summary) }}
+</section>
+
+<section class="card">
+  <div class="row between">
+    <h2>Organization profile</h2>
+    <a class="button secondary" href="{{ url_for('admin.edit_profile', user_id=user.user_id) }}">{{ "Edit profile" if profile else "Fill in profile" }}</a>
+  </div>
+  {% if profile %}{{ profile_card(profile, fields) }}
+  {% else %}<p class="muted">This user hasn't filled in their profile yet. They'll be asked to when they first log in.</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>Personal profile</h2>
+  {% if personal %}{{ profile_card(personal, personal_fields) }}
+  {% else %}<p class="muted">The account holder hasn't added their personal details yet.</p>{% endif %}
 </section>
 
 <section class="card">

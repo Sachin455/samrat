@@ -13,7 +13,10 @@ A Flask web app with two sides:
 **User side** (`/`): each account holder
 - logs in with their 9-digit ID and the first-time password, and is **required to choose their own password**
   on that first login (they can change it again any time from *Change password*),
-- sees a **personal dashboard** with totals and their **latest 5 transactions**,
+- must then fill in their **organization profile** before the dashboard opens: full name, address,
+  establishment date, head of the organization, organization email and contact number, running classes,
+  chairperson and accountant (all required; editable later from *Profile*, and by the admin),
+- sees a **personal dashboard** with totals, their **latest 5 transactions** and their profile,
 - can view all their transactions, filter by date, and **download a PDF statement**.
 
 ## Running locally

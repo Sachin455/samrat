@@ -54,6 +54,28 @@ def user_login(client, user_id, password=DEFAULT_USER_PASSWORD):
     return post(client, "/login", {"user_id": user_id, "password": password})
 
 
+PROFILE = {
+    "full_name": "Sunrise Academy",
+    "address": "Ward 4, Kathmandu",
+    "established_date": "2005-04-14",
+    "head_name": "Ram Sharma",
+    "email": "office@sunrise.edu.np",
+    "phone": "+977 1 4123456",
+    "running_classes": "Nursery to Grade 10",
+    "chairperson": "Sita Karki",
+    "accountant": "Hari Thapa",
+}
+
+
+def onboard_user(client, user_id, password="mine123", profile=None):
+    """First login: set own password, then fill in the organization profile."""
+    user_login(client, user_id)
+    post(client, "/change-password", {"current_password": DEFAULT_USER_PASSWORD,
+                                      "new_password": password, "confirm": password})
+    r = post(client, "/profile", {**PROFILE, **(profile or {})})
+    assert r.headers["Location"].endswith("/dashboard")
+
+
 def xlsx(rows, header=("User ID", "Date", "Description", "Type", "Amount", "Reference")):
     wb = Workbook()
     ws = wb.active
@@ -121,8 +143,10 @@ def test_admin_adds_users_and_user_first_login_forces_password_change(client):
     r = post(client, "/change-password", {"current_password": DEFAULT_USER_PASSWORD,
                                           "new_password": DEFAULT_USER_PASSWORD, "confirm": DEFAULT_USER_PASSWORD})
     assert r.status_code == 400
-    post(client, "/change-password", {"current_password": DEFAULT_USER_PASSWORD,
-                                      "new_password": "mine123", "confirm": "mine123"})
+    r = post(client, "/change-password", {"current_password": DEFAULT_USER_PASSWORD,
+                                          "new_password": "mine123", "confirm": "mine123"})
+    assert r.headers["Location"].endswith("/profile")
+    post(client, "/profile", PROFILE)
     assert client.get("/dashboard").status_code == 200
     post(client, "/logout")
     assert user_login(client, "100000001").status_code == 401
@@ -188,9 +212,7 @@ def test_upload_routes_rows_and_dashboard_shows_latest_five(client):
     assert "not a 9-digit user ID" in html and "not a valid amount" in html
     post(client, "/admin/logout")
 
-    user_login(client, "100000001")
-    post(client, "/change-password", {"current_password": DEFAULT_USER_PASSWORD,
-                                      "new_password": "mine123", "confirm": "mine123"})
+    onboard_user(client, "100000001")
     html = client.get("/dashboard").get_data(as_text=True)
     shown = re.findall(r"Txn day (\d)", html)
     assert shown == ["7", "6", "5", "4", "3"]  # latest five, newest first
@@ -292,9 +314,7 @@ def test_user_only_sees_own_transactions(client):
     add_users(client, "100000001", "100000002")
     upload(client, xlsx([("100000002", None, "Secret", "Credit", 1, None)]))
     post(client, "/admin/logout")
-    user_login(client, "100000001")
-    post(client, "/change-password", {"current_password": DEFAULT_USER_PASSWORD,
-                                      "new_password": "mine123", "confirm": "mine123"})
+    onboard_user(client, "100000001")
     assert "Secret" not in client.get("/transactions").get_data(as_text=True)
     assert b"Secret" not in client.get("/transactions.pdf").data
 
@@ -305,6 +325,136 @@ def test_delete_user_removes_transactions(client):
     upload(client, xlsx([("100000001", None, "Gone", "Credit", 1, None)]))
     post(client, "/admin/users/100000001/delete")
     assert "Gone" not in client.get("/admin/transactions").get_data(as_text=True)
+
+
+# ---------------------------------------------------------------- profiles
+
+
+def test_profile_required_before_dashboard(client):
+    admin_login(client)
+    add_users(client, "100000001")
+    post(client, "/admin/logout")
+    user_login(client, "100000001")
+    post(client, "/change-password", {"current_password": DEFAULT_USER_PASSWORD,
+                                      "new_password": "mine123", "confirm": "mine123"})
+    for path in ("/dashboard", "/transactions", "/transactions.pdf", "/"):
+        r = client.get(path, follow_redirects=False)
+        if path == "/":
+            r = client.get(r.headers["Location"])
+        assert r.headers["Location"].endswith("/profile"), path
+    html = client.get("/profile").get_data(as_text=True)
+    assert "Tell us about your organization" in html
+    assert "All transactions" not in html  # nav hidden until the profile is done
+
+    # logging out and back in still lands on the profile form
+    post(client, "/logout")
+    user_login(client, "100000001", "mine123")
+    assert client.get("/dashboard").headers["Location"].endswith("/profile")
+
+    post(client, "/profile", PROFILE)
+    html = client.get("/dashboard").get_data(as_text=True)
+    assert "Sunrise Academy" in html and "Ram Sharma" in html and "Nursery to Grade 10" in html
+    assert "office@sunrise.edu.np" in html and "Hari Thapa" in html and "Sita Karki" in html
+
+
+def test_profile_validation(client):
+    admin_login(client)
+    add_users(client, "100000001")
+    post(client, "/admin/logout")
+    user_login(client, "100000001")
+    post(client, "/change-password", {"current_password": DEFAULT_USER_PASSWORD,
+                                      "new_password": "mine123", "confirm": "mine123"})
+    r = post(client, "/profile", {})
+    assert r.status_code == 400
+    html = r.get_data(as_text=True)
+    for label in ("Full name of the organization", "Address", "Establishment date", "Head of the organization",
+                  "Organization email", "Organization contact number", "Running classes",
+                  "Chairperson of the organization", "Accountant of the organization"):
+        assert f"{label} is required." in html
+
+    bad = {**PROFILE, "email": "not-an-email", "phone": "12ab", "established_date": "2999-01-01"}
+    html = post(client, "/profile", bad).get_data(as_text=True)
+    assert "valid email" in html and "valid phone number" in html and "can&#39;t be in the future" in html
+    assert 'value="Sunrise Academy"' in html  # entered values are kept
+    assert client.get("/dashboard").headers["Location"].endswith("/profile")
+
+
+def test_user_can_edit_profile_later(client):
+    admin_login(client)
+    add_users(client, "100000001")
+    post(client, "/admin/logout")
+    onboard_user(client, "100000001")
+    assert 'value="Sunrise Academy"' in client.get("/profile").get_data(as_text=True)
+    post(client, "/profile", {**PROFILE, "accountant": "Gita Rai"})
+    html = client.get("/dashboard").get_data(as_text=True)
+    assert "Gita Rai" in html and "Hari Thapa" not in html
+
+
+def test_admin_sees_and_edits_profiles(client):
+    admin_login(client)
+    add_users(client, "100000001", "100000002")
+    post(client, "/admin/logout")
+    onboard_user(client, "100000001")
+    post(client, "/logout")
+
+    admin_login(client)
+    html = client.get("/admin/users").get_data(as_text=True)
+    assert "Sunrise Academy" in html and "First-time password" in html  # 100000002 never logged in
+    html = client.get("/admin/users?q=sunrise").get_data(as_text=True)
+    assert "/admin/users/100000001" in html and "/admin/users/100000002" not in html
+    html = client.get("/admin/users/100000001").get_data(as_text=True)
+    assert "Sunrise Academy" in html and "Ram Sharma" in html
+    assert "hasn't filled in their profile" in client.get("/admin/users/100000002").get_data(as_text=True)
+
+    r = post(client, "/admin/users/100000001/profile", {**PROFILE, "head_name": "New Head"})
+    assert r.headers["Location"].endswith("/admin/users/100000001")
+    assert "New Head" in client.get("/admin/users/100000001").get_data(as_text=True)
+    assert post(client, "/admin/users/100000001/profile", {**PROFILE, "email": "x"}).status_code == 400
+
+
+def test_personal_profile_optional_and_editable(client):
+    admin_login(client)
+    add_users(client, "100000001")
+    post(client, "/admin/logout")
+    onboard_user(client, "100000001")
+
+    # not required to reach the dashboard, but suggested there
+    html = client.get("/dashboard").get_data(as_text=True)
+    assert "My profile" in html and "Add your own name" in html
+
+    r = post(client, "/me", {"designation": "Principal"})
+    assert r.status_code == 400 and "Full name is required." in r.get_data(as_text=True)
+    r = post(client, "/me", {"full_name": "Ram Sharma", "email": "nope", "phone": "x"})
+    html = r.get_data(as_text=True)
+    assert "valid email" in html and "valid phone number" in html
+
+    r = post(client, "/me", {"full_name": "Ram Sharma", "designation": "Principal",
+                             "email": "ram@example.com", "phone": "9812345678"})
+    assert r.headers["Location"].endswith("/dashboard")
+    html = client.get("/dashboard").get_data(as_text=True)
+    assert "Signed in as Ram Sharma (Principal)" in html and "Add your own name" not in html
+    assert "Log out (Ram Sharma)" in html
+    assert 'value="ram@example.com"' in client.get("/me").get_data(as_text=True)
+
+    post(client, "/me", {"full_name": "Ram K. Sharma"})  # optional fields can be cleared
+    html = client.get("/me").get_data(as_text=True)
+    assert 'value="Ram K. Sharma"' in html and "ram@example.com" not in html
+
+    post(client, "/logout")
+    admin_login(client)
+    html = client.get("/admin/users/100000001").get_data(as_text=True)
+    assert "Personal profile" in html and "Ram K. Sharma" in html
+
+
+def test_personal_profile_requires_onboarding_first(client):
+    admin_login(client)
+    add_users(client, "100000001")
+    post(client, "/admin/logout")
+    user_login(client, "100000001")
+    assert client.get("/me").headers["Location"].endswith("/change-password")
+    post(client, "/change-password", {"current_password": DEFAULT_USER_PASSWORD,
+                                      "new_password": "mine123", "confirm": "mine123"})
+    assert client.get("/me").headers["Location"].endswith("/profile")
 
 
 # ------------------------------------------------------------------ units

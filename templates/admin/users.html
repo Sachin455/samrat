@@ -31,18 +31,19 @@
   <div class="row between">
     <h1>Users ({{ users|length }})</h1>
     <form method="get" class="row">
-      <input name="q" value="{{ q }}" placeholder="Search user ID" inputmode="numeric" aria-label="Search user ID">
+      <input name="q" value="{{ q }}" placeholder="Search ID or organization" aria-label="Search by user ID or organization name">
       <button type="submit" class="secondary">Search</button>
     </form>
   </div>
   {% if users %}
   <div class="table-wrap"><table>
-    <thead><tr><th>User ID</th><th>Status</th><th class="num">Transactions</th><th>Latest transaction</th><th>Last login</th><th></th></tr></thead>
+    <thead><tr><th>User ID</th><th>Organization</th><th>Status</th><th class="num">Transactions</th><th>Latest transaction</th><th>Last login</th><th></th></tr></thead>
     <tbody>
     {% for u in users %}
       <tr>
         <td><a href="{{ url_for('admin.user_detail', user_id=u.user_id) }}"><strong>{{ u.user_id }}</strong></a></td>
-        <td>{% if u.must_change_password %}<span class="pill">First-time password</span>{% else %}<span class="pill credit">Active</span>{% endif %}</td>
+        <td>{{ u.full_name or "—" }}</td>
+        <td>{% if u.must_change_password %}<span class="pill">First-time password</span>{% elif not u.full_name %}<span class="pill">Profile pending</span>{% else %}<span class="pill credit">Active</span>{% endif %}</td>
         <td class="num">{{ u.txn_count }}</td>
         <td>{{ u.last_txn or "—" }}</td>
         <td>{{ u.last_login.replace("T", " ") if u.last_login else "Never" }}</td>

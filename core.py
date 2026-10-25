@@ -66,6 +66,28 @@ CREATE TABLE IF NOT EXISTS transactions (
     created_at TEXT NOT NULL,
     updated_at TEXT
 );
+CREATE TABLE IF NOT EXISTS profiles (
+    user_pk INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    full_name TEXT NOT NULL,
+    address TEXT NOT NULL,
+    established_date TEXT NOT NULL,
+    head_name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    running_classes TEXT NOT NULL,
+    chairperson TEXT NOT NULL,
+    accountant TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS personal_profiles (
+    user_pk INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    full_name TEXT NOT NULL,
+    designation TEXT NOT NULL DEFAULT '',
+    email TEXT NOT NULL DEFAULT '',
+    phone TEXT NOT NULL DEFAULT '',
+    address TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_txn_user ON transactions(user_pk, txn_date);
 CREATE INDEX IF NOT EXISTS idx_txn_upload ON transactions(upload_id);
 """
@@ -147,6 +169,75 @@ def create_users(user_ids):
         except sqlite3.IntegrityError:
             existing.append(uid)
     return created, existing
+
+
+# (column, label, input type, max length, required) for the two profile forms.
+PROFILE_FIELDS = [  # organization profile, filled in on first login
+    ("full_name", "Full name of the organization", "text", 200, True),
+    ("address", "Address", "textarea", 500, True),
+    ("established_date", "Establishment date", "date", 10, True),
+    ("head_name", "Head of the organization", "text", 120, True),
+    ("email", "Organization email", "email", 120, True),
+    ("phone", "Organization contact number", "tel", 30, True),
+    ("running_classes", "Running classes", "textarea", 500, True),
+    ("chairperson", "Chairperson of the organization", "text", 120, True),
+    ("accountant", "Accountant of the organization", "text", 120, True),
+]
+PERSONAL_FIELDS = [  # the account holder's own details, editable any time
+    ("full_name", "Full name", "text", 120, True),
+    ("designation", "Designation / position", "text", 120, False),
+    ("email", "Personal email", "email", 120, False),
+    ("phone", "Mobile number", "tel", 30, False),
+    ("address", "Personal address", "textarea", 500, False),
+]
+PROFILE_TABLES = {"organization": ("profiles", PROFILE_FIELDS), "personal": ("personal_profiles", PERSONAL_FIELDS)}
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+PHONE_RE = re.compile(r"^\+?[\d\s()-]+$")
+
+
+def get_profile(user_pk, kind="organization"):
+    table, _ = PROFILE_TABLES[kind]
+    return get_db().execute(f"SELECT * FROM {table} WHERE user_pk = ?", (user_pk,)).fetchone()
+
+
+def validate_profile(form, kind="organization"):
+    """Return (values, errors) where errors maps field name -> message."""
+    _, fields = PROFILE_TABLES[kind]
+    values, errors = {}, {}
+    for key, label, input_type, max_len, required in fields:
+        value = form.get(key, "").strip()
+        values[key] = value
+        if not value:
+            if required:
+                errors[key] = f"{label} is required."
+            continue
+        if len(value) > max_len:
+            errors[key] = f"{label} must be at most {max_len} characters."
+        elif input_type == "email" and not EMAIL_RE.match(value):
+            errors[key] = "Enter a valid email address, e.g. office@school.edu.np."
+        elif input_type == "tel" and (not PHONE_RE.match(value) or not 7 <= len(re.sub(r"\D", "", value)) <= 15):
+            errors[key] = "Enter a valid phone number (7 to 15 digits)."
+        elif input_type == "date":
+            try:
+                day = datetime.strptime(value, "%Y-%m-%d").date()
+            except ValueError:
+                errors[key] = f"Enter the {label.lower()} as a date."
+            else:
+                if day > date.today():
+                    errors[key] = f"{label} can't be in the future."
+    return values, errors
+
+
+def save_profile(user_pk, values, kind="organization"):
+    table, fields = PROFILE_TABLES[kind]
+    columns = [key for key, *_ in fields]
+    get_db().execute(
+        f"""INSERT INTO {table} (user_pk, {", ".join(columns)}, updated_at)
+            VALUES (?, {", ".join("?" * len(columns))}, ?)
+            ON CONFLICT(user_pk) DO UPDATE SET
+            {", ".join(f"{c} = excluded.{c}" for c in columns)}, updated_at = excluded.updated_at""",
+        (user_pk, *(values[c] for c in columns), now_iso()),
+    )
 
 
 def txn_summary(where, params):

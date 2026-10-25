@@ -23,6 +23,8 @@ from werkzeug.security import check_password_hash
 
 from core import (
     MIN_PASSWORD_LEN,
+    PERSONAL_FIELDS,
+    PROFILE_FIELDS,
     TXN_ORDER,
     TXN_SELECT,
     UploadError,
@@ -31,6 +33,7 @@ from core import (
     cents_to_input,
     create_users,
     get_db,
+    get_profile,
     get_setting,
     hash_password,
     normalize_type,
@@ -41,9 +44,11 @@ from core import (
     parse_workbook,
     record_amount_and_type,
     safe_next,
+    save_profile,
     set_setting,
     txn_summary,
     validate_new_password,
+    validate_profile,
 )
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -229,12 +234,14 @@ def users():
                       "success")
         return redirect(url_for("admin.users", q=request.args.get("q", "")))
 
-    q = re.sub(r"\D", "", request.args.get("q", ""))
+    q = request.args.get("q", "").strip()
     rows = db.execute(
-        """SELECT u.*, COUNT(t.id) AS txn_count, MAX(t.txn_date) AS last_txn
-           FROM users u LEFT JOIN transactions t ON t.user_pk = u.id
-           WHERE u.user_id LIKE ? GROUP BY u.id ORDER BY u.user_id""",
-        (f"%{q}%",),
+        """SELECT u.*, p.full_name, COUNT(t.id) AS txn_count, MAX(t.txn_date) AS last_txn
+           FROM users u
+           LEFT JOIN profiles p ON p.user_pk = u.id
+           LEFT JOIN transactions t ON t.user_pk = u.id
+           WHERE u.user_id LIKE ? OR p.full_name LIKE ? GROUP BY u.id ORDER BY u.user_id""",
+        (f"%{q}%", f"%{q}%"),
     ).fetchall()
     return render_template("admin/users.html", users=rows, q=q, default_password=get_setting("default_password"))
 
@@ -246,8 +253,28 @@ def user_detail(user_id):
     rows = get_db().execute(f"{TXN_SELECT} WHERE t.user_pk = ? {TXN_ORDER}", (user["id"],)).fetchall()
     return render_template(
         "admin/user_detail.html", user=user, rows=rows, summary=txn_summary("t.user_pk = ?", (user["id"],)),
-        today=date.today().isoformat(),
+        today=date.today().isoformat(), profile=get_profile(user["id"]), fields=PROFILE_FIELDS,
+        personal=get_profile(user["id"], "personal"), personal_fields=PERSONAL_FIELDS,
     )
+
+
+@bp.route("/users/<user_id>/profile", methods=["GET", "POST"])
+@admin_required
+def edit_profile(user_id):
+    user = get_user_or_404(user_id)
+    page = {"portal": "admin", "fields": PROFILE_FIELDS, "heading": f"Organization profile of user {user_id}",
+            "intro": "", "first_time": False, "cancel_url": url_for("admin.user_detail", user_id=user_id)}
+    if request.method == "POST":
+        values, errors = validate_profile(request.form)
+        if errors:
+            flash("Please correct the highlighted fields.", "error")
+            return render_template("profile_form.html", values=values, errors=errors, **page), 400
+        save_profile(user["id"], values)
+        get_db().commit()
+        flash(f"Profile of {user_id} saved.", "success")
+        return redirect(url_for("admin.user_detail", user_id=user_id))
+    existing = get_profile(user["id"])
+    return render_template("profile_form.html", values=dict(existing) if existing else {}, errors={}, **page)
 
 
 @bp.route("/users/<user_id>/transactions.pdf")
@@ -255,7 +282,9 @@ def user_detail(user_id):
 def user_pdf(user_id):
     user = get_user_or_404(user_id)
     rows = get_db().execute(f"{TXN_SELECT} WHERE t.user_pk = ? {TXN_ORDER}", (user["id"],)).fetchall()
-    subtitle = f"User ID: {user['user_id']} | Generated: {datetime.now():%Y-%m-%d %H:%M}"
+    profile = get_profile(user["id"])
+    name = f"{profile['full_name']} | " if profile else ""
+    subtitle = f"{name}User ID: {user['user_id']} | Generated: {datetime.now():%Y-%m-%d %H:%M}"
     return send_file(build_pdf("Transaction Statement", subtitle, rows), as_attachment=True,
                      download_name=f"statement_{user['user_id']}.pdf", mimetype="application/pdf")
 

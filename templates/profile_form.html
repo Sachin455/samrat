@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }}{% endblock %}
+{% block content %}
+<section class="card narrow wide-narrow">
+  {% if first_time %}
+  <p class="steps"><span class="done">1. Set password ✓</span> <span class="current">2. Organization profile</span> <span>3. Dashboard</span></p>
+  {% endif %}
+  <h1>{{ heading }}</h1>
+  {% if intro %}<p class="muted">{{ intro }}</p>{% endif %}
+  <form method="post" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% for key, label, kind, max_len, required in fields %}
+    <label class="{{ 'has-error' if errors.get(key) }}">{{ label }}{% if not required %} <span class="muted">(optional)</span>{% endif %}
+      {% if kind == 'textarea' %}
+      <textarea name="{{ key }}" rows="{{ 3 if key == 'address' else 2 }}" maxlength="{{ max_len }}" {{ 'required' if required }}
+        {% if key == 'running_classes' %}placeholder="e.g. Nursery to Grade 10"{% endif %}>{{ values.get(key, '') }}</textarea>
+      {% else %}
+      <input type="{{ kind }}" name="{{ key }}" value="{{ values.get(key, '') }}" maxlength="{{ max_len }}" {{ 'required' if required }}
+        {% if kind == 'date' %}max="{{ today }}"{% endif %}
+        {% if kind == 'tel' %}placeholder="e.g. +977 9812345678"{% endif %}
+        {% if kind == 'email' %}placeholder="e.g. name@example.com"{% endif %}
+        {% if loop.first %}autofocus{% endif %}>
+      {% endif %}
+      {% if errors.get(key) %}<small class="error-text">{{ errors[key] }}</small>{% endif %}
+    </label>
+    {% endfor %}
+    <div class="row">
+      <button type="submit">{{ "Save and continue" if first_time else "Save" }}</button>
+      {% if not first_time %}<a href="{{ cancel_url }}">Cancel</a>{% endif %}
+    </div>
+  </form>
+  {% if first_time %}
+  <form method="post" action="{{ url_for('user.logout') }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="link plain">Log out and finish later</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

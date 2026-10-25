@@ -73,3 +73,16 @@ code.big { font-size: 16px; padding: 3px 8px; }
 .card.wide-narrow { max-width: 560px; }
 td form.inline { margin-left: 8px; }
 @media (max-width: 600px) { .txn-form .wide { grid-column: auto; } .topbar { padding: 12px 16px; } }
+
+/* --- organization profile --- */
+.profile { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 24px; margin: 8px 0 0; }
+.profile dt { font-size: 13px; color: var(--muted); }
+.profile dd { margin: 2px 0 0; white-space: pre-line; overflow-wrap: anywhere; }
+.profile .span-2 { grid-column: 1 / -1; }
+.has-error input, .has-error textarea { border-color: var(--err); }
+.error-text { color: var(--err) !important; }
+.steps { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+.steps .done { color: var(--ok); }
+.steps .current { color: var(--brand); font-weight: 700; }
+.notice { background: #fff8e6; border: 1px solid #f3d27a; border-radius: 6px; padding: 8px 12px; margin: 8px 0 0; }
+label .muted { font-weight: 400; }

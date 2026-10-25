@@ -42,3 +42,14 @@
   <div class="stat"><span>Net</span><strong>{{ (summary.credits - summary.debits) | money }}</strong></div>
 </div>
 {% endmacro %}
+
+{% macro profile_card(profile, fields) %}
+<dl class="profile">
+  {% for key, label, kind, max_len, required in fields %}
+  <div class="{{ 'span-2' if kind == 'textarea' }}">
+    <dt>{{ label }}</dt>
+    <dd>{% if not profile[key] %}<span class="muted">—</span>{% elif kind == 'email' %}<a href="mailto:{{ profile[key] }}">{{ profile[key] }}</a>{% elif kind == 'tel' %}<a href="tel:{{ profile[key] }}">{{ profile[key] }}</a>{% else %}{{ profile[key] }}{% endif %}</dd>
+  </div>
+  {% endfor %}
+</dl>
+{% endmacro %}

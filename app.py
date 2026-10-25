@@ -8,6 +8,7 @@ for those IDs, and can view, add, edit or delete any transaction.
 
 import os
 import secrets
+from datetime import date
 
 from flask import Flask, flash, redirect, request, url_for
 
@@ -49,6 +50,7 @@ def create_app(config=None):
             "current_user": user_views.current_user(),
             "current_admin": admin_views.current_admin(),
             "csrf_token": csrf_token,
+            "today": date.today().isoformat(),
         }
 
     @app.errorhandler(413)

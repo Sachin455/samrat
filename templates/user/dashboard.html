@@ -1,9 +1,13 @@
 {% extends "base.html" %}
-{% from "_macros.html" import txn_table, summary_cards with context %}
+{% from "_macros.html" import txn_table, summary_cards, profile_card with context %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 <section class="card">
-  <h1>Welcome, {{ current_user.user_id }}</h1>
+  <h1>{{ profile.full_name }}</h1>
+  <p class="muted">User ID {{ current_user.user_id }}{% if personal %} · Signed in as {{ personal.full_name }}{% if personal.designation %} ({{ personal.designation }}){% endif %}{% endif %}</p>
+  {% if not personal %}
+  <p class="notice">Add your own name and contact details in <a href="{{ url_for('user.personal_profile') }}">My profile</a>.</p>
+  {% endif %}
   {{ summary_cards(summary) }}
 </section>
 <section class="card">
@@ -15,5 +19,12 @@
     </div>
   </div>
   {{ txn_table(latest, empty="No transactions have been added to your account yet.") }}
+</section>
+<section class="card">
+  <div class="row between">
+    <h2>Organization profile</h2>
+    <a class="button secondary" href="{{ url_for('user.profile') }}">Edit profile</a>
+  </div>
+  {{ profile_card(profile, fields) }}
 </section>
 {% endblock %}

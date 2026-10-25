@@ -18,16 +18,22 @@ from werkzeug.security import check_password_hash
 
 from core import (
     LATEST_COUNT,
+    PERSONAL_FIELDS,
+    PROFILE_FIELDS,
+    PROFILE_TABLES,
     TXN_ORDER,
     TXN_SELECT,
     build_pdf,
     get_db,
+    get_profile,
     hash_password,
     normalize_user_id,
     now_iso,
     safe_next,
+    save_profile,
     txn_summary,
     validate_new_password,
+    validate_profile,
 )
 
 bp = Blueprint("user", __name__)
@@ -39,12 +45,19 @@ def current_user():
         return None
     if "user" not in g:
         g.user = get_db().execute(
-            "SELECT id, user_id, must_change_password FROM users WHERE id = ?", (uid,)
+            """SELECT u.id, u.user_id, u.must_change_password, p.full_name, pp.full_name AS person_name
+               FROM users u
+               LEFT JOIN profiles p ON p.user_pk = u.id
+               LEFT JOIN personal_profiles pp ON pp.user_pk = u.id
+               WHERE u.id = ?""",
+            (uid,),
         ).fetchone()
     return g.user
 
 
 def login_required(view):
+    """Require a logged-in user who has set a password and filled in their profile."""
+
     @wraps(view)
     def wrapped(*args, **kwargs):
         user = current_user()
@@ -53,6 +66,9 @@ def login_required(view):
             return redirect(url_for("user.login", next=request.path))
         if user["must_change_password"] and request.endpoint != "user.change_password":
             return redirect(url_for("user.change_password"))
+        if (not user["must_change_password"] and user["full_name"] is None
+                and request.endpoint not in ("user.profile", "user.change_password")):
+            return redirect(url_for("user.profile"))
         return view(*args, **kwargs)
 
     return wrapped
@@ -140,9 +156,61 @@ def change_password():
             (hash_password(new), user["id"]),
         )
         db.commit()
+        if user["full_name"] is None:
+            flash("Password saved. Now please fill in your organization's profile.", "success")
+            return redirect(url_for("user.profile"))
         flash("Your password has been changed.", "success")
         return redirect(url_for("user.dashboard"))
     return render_template("change_password.html", portal="user", forced=user["must_change_password"])
+
+
+def profile_form(kind, heading, intro="", first_time=False):
+    """Show and save one of the current user's profile forms.
+
+    Returns a response to send, or None once the form has been saved.
+    """
+    user = current_user()
+    page = {"portal": "user", "fields": PROFILE_TABLES[kind][1], "heading": heading, "intro": intro,
+            "first_time": first_time, "cancel_url": url_for("user.dashboard")}
+    if request.method == "POST":
+        values, errors = validate_profile(request.form, kind)
+        if errors:
+            flash("Please correct the highlighted fields.", "error")
+            return render_template("profile_form.html", values=values, errors=errors, **page), 400
+        save_profile(user["id"], values, kind)
+        get_db().commit()
+        return None
+    existing = get_profile(user["id"], kind)
+    return render_template("profile_form.html", values=dict(existing) if existing else {}, errors={}, **page)
+
+
+@bp.route("/profile", methods=["GET", "POST"])
+@login_required
+def profile():
+    """Organization profile: required on first login, editable afterwards."""
+    first_time = current_user()["full_name"] is None
+    if first_time:
+        response = profile_form(
+            "organization", "Tell us about your organization",
+            "All fields are required. Your dashboard opens once this is saved, "
+            "and you can edit these details any time later.", first_time=True)
+    else:
+        response = profile_form("organization", "Organization profile")
+    if response is not None:
+        return response
+    flash("Profile saved. Welcome to your dashboard!" if first_time else "Organization profile updated.", "success")
+    return redirect(url_for("user.dashboard"))
+
+
+@bp.route("/me", methods=["GET", "POST"])
+@login_required
+def personal_profile():
+    """The account holder's own details, editable any time."""
+    response = profile_form("personal", "My profile", "Your own details as the person using this account.")
+    if response is not None:
+        return response
+    flash("Your profile has been updated.", "success")
+    return redirect(url_for("user.dashboard"))
 
 
 @bp.route("/dashboard")
@@ -154,7 +222,8 @@ def dashboard():
     ).fetchall()
     return render_template(
         "user/dashboard.html", latest=latest, summary=txn_summary("t.user_pk = ?", (user["id"],)),
-        latest_count=LATEST_COUNT,
+        latest_count=LATEST_COUNT, profile=get_profile(user["id"]), fields=PROFILE_FIELDS,
+        personal=get_profile(user["id"], "personal"), personal_fields=PERSONAL_FIELDS,
     )
 
 
@@ -180,7 +249,8 @@ def transactions_pdf():
     period = ""
     if filters["from"] or filters["to"]:
         period = f" | Period: {filters['from'] or 'start'} to {filters['to'] or 'today'}"
-    subtitle = f"User ID: {user['user_id']}{period} | Generated: {datetime.now():%Y-%m-%d %H:%M}"
+    subtitle = (f"{user['full_name']} | User ID: {user['user_id']}{period}"
+                f" | Generated: {datetime.now():%Y-%m-%d %H:%M}")
     pdf = build_pdf("Transaction Statement", subtitle, rows)
     return send_file(pdf, as_attachment=True, download_name=f"statement_{user['user_id']}.pdf",
                      mimetype="application/pdf")

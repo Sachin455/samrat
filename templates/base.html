@@ -26,14 +26,16 @@
       {% endif %}
     {% else %}
       <a class="brand" href="{{ url_for('user.index') }}">TxnShare</a>
-      {% if current_user and not current_user.must_change_password %}
+      {% if current_user and not current_user.must_change_password and current_user.full_name %}
       <nav>
         <a href="{{ url_for('user.dashboard') }}">Dashboard</a>
         <a href="{{ url_for('user.transactions') }}">All transactions</a>
+        <a href="{{ url_for('user.personal_profile') }}">My profile</a>
+        <a href="{{ url_for('user.profile') }}">Organization</a>
         <a href="{{ url_for('user.change_password') }}">Change password</a>
         <form method="post" action="{{ url_for('user.logout') }}" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="link">Log out ({{ current_user.user_id }})</button>
+          <button type="submit" class="link">Log out ({{ current_user.person_name or current_user.user_id }})</button>
         </form>
       </nav>
       {% endif %}
