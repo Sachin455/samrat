@@ -1,11 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Upload transactions{% endblock %}
+{% block title %}Upload{% endblock %}
 {% block content %}
 <section class="card">
-  <h1>Upload transactions</h1>
+  <h1>Import transactions</h1>
+  <p class="muted">Reads each row of an Excel or CSV sheet into a transaction. To share other files (PDF, Word, images…), use <a href="#documents">Upload documents</a> below.</p>
   <form method="post" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Excel file (.xlsx) <input type="file" name="file" accept=".xlsx,.xlsm" required></label>
+    <label>Excel or CSV file (.xlsx, .xls, .csv) <input type="file" name="file" accept=".xlsx,.xlsm,.xls,.csv" required></label>
     <label>Upload everything to one user ID <span class="muted">(optional)</span>
       <input name="target_user_id" value="{{ form.get('target_user_id', '') }}" pattern="\d{9}" maxlength="9"
              inputmode="numeric" placeholder="e.g. 100000001">
@@ -13,7 +14,7 @@
     </label>
     <label class="check"><input type="checkbox" name="create_missing" value="1" {{ 'checked' if form.get('create_missing') }}>
       Create user accounts for IDs that don't exist yet (with the first-time password)</label>
-    <button type="submit">Upload</button>
+    <button type="submit">Import transactions</button>
   </form>
 </section>
 
@@ -38,8 +39,27 @@
 </section>
 {% endif %}
 
+<section class="card" id="documents">
+  <h2>Upload documents</h2>
+  <p class="muted">Attach any files (images, PDF, Word, Excel, PowerPoint, text) to a user. They appear in that user's
+    <strong>Documents</strong> and can be viewed or downloaded. Up to 25 MB per upload.</p>
+  <form method="post" action="{{ url_for('admin.upload_documents') }}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>User ID
+      <input name="user_id" value="{{ doc_user }}" required pattern="\d{9}" maxlength="9" inputmode="numeric" placeholder="e.g. 100000001">
+    </label>
+    <label>Files <span class="muted">(you can select several)</span>
+      <input type="file" name="files" multiple required accept="{{ document_accept }}">
+    </label>
+    <label>Title <span class="muted">(optional; used when uploading a single file, otherwise the file name is used)</span>
+      <input name="title" maxlength="200" placeholder="e.g. Audit report 2025/26">
+    </label>
+    <button type="submit">Upload documents</button>
+  </form>
+</section>
+
 <section class="card">
-  <h2>Excel format</h2>
+  <h2>Transaction sheet format</h2>
   <p>The first row must be the header. <a href="{{ url_for('admin.template') }}">Download the template</a>.</p>
   <table class="spec">
     <thead><tr><th>Column</th><th>Required</th><th>Example</th></tr></thead>

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import txn_table, summary_cards, profile_card with context %}
+{% from "_macros.html" import txn_table, summary_cards, profile_card, documents_table with context %}
 {% block title %}User {{ user.user_id }}{% endblock %}
 {% block content %}
 <section class="card">
@@ -41,6 +41,18 @@
   <h2>Personal profile</h2>
   {% if personal %}{{ profile_card(personal, personal_fields) }}
   {% else %}<p class="muted">The account holder hasn't added their personal details yet.</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>Documents ({{ documents|length }})</h2>
+  <form method="post" action="{{ url_for('admin.upload_documents') }}" enctype="multipart/form-data" class="doc-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="user_id" value="{{ user.user_id }}">
+    <label>Files <input type="file" name="files" multiple required accept="{{ document_accept }}"></label>
+    <label>Title <span class="muted">(optional, for a single file)</span> <input name="title" maxlength="200"></label>
+    <button type="submit">Upload</button>
+  </form>
+  {{ documents_table(documents, admin=True) }}
 </section>
 
 <section class="card">

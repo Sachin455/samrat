@@ -5,8 +5,10 @@ A Flask web app with two sides:
 **Admin portal** (`/admin`): a single admin account that
 - adds account holders by their **9-digit user ID** (one at a time or many pasted at once),
 - sets the shared **first-time password** new users log in with, and can reset any user back to it,
-- **uploads Excel files** of transactions, either to one chosen user ID or routed per row by a `User ID` column
-  (optionally creating accounts for IDs that don't exist yet),
+- **imports transactions** from Excel (`.xlsx`, `.xls`) or CSV files, either to one chosen user ID or routed per
+  row by a `User ID` column (optionally creating accounts for IDs that don't exist yet),
+- **uploads documents** of any common type (images, PDF, Word, Excel, PowerPoint, text; up to 25 MB per upload)
+  to a user, who can then view or download them,
 - has full access to **every user's transactions**: view, filter, add, edit (including moving to another user),
   delete, delete a whole upload, and download any user's statement as PDF.
 
@@ -17,7 +19,17 @@ A Flask web app with two sides:
   establishment date, head of the organization, organization email and contact number, running classes,
   chairperson and accountant (all required; editable later from *Profile*, and by the admin),
 - sees a **personal dashboard** with totals, their **latest 5 transactions** and their profile,
-- can view all their transactions, filter by date, and **download a PDF statement**.
+- can view all their transactions, filter by date, and **download a PDF statement**,
+- sees the **documents** the admin has shared with them (images and PDFs open in the browser, others download).
+
+## PDF statement layout
+
+- Top centre: the organization's name in bold, with its address beneath in smaller type.
+- At most **25 transactions per page**, oldest first, with separate Debit and Credit columns, a
+  "Carried forward" running total at the foot of each full page and the totals on the last page.
+- At the bottom of every page: **Prepared by** (left), **Checked by** (centre) and **Approved by** (right),
+  filled in from the organization profile: Accountant, Head of the organization and Chairperson respectively
+  (see `PDF_SIGNATURES` in `core.py` to change this).
 
 ## Running locally
 
@@ -38,7 +50,8 @@ python app.py                   # http://localhost:5000  (PORT=5001 python app.p
 You can set different starting values before the first run with the `ADMIN_USERNAME`, `ADMIN_PASSWORD` and
 `DEFAULT_USER_PASSWORD` environment variables.
 
-Data is stored in SQLite at `instance/bank.db` (change it with the `DATABASE` environment variable).
+Data is stored in SQLite at `instance/bank.db` (change it with the `DATABASE` environment variable), and uploaded
+documents in `instance/documents/` (or `DOCUMENTS_DIR`). Back up both together.
 For production, run it behind a WSGI server, e.g. `gunicorn "app:create_app()"`, with a fixed `SECRET_KEY` and HTTPS.
 
 ## Excel format

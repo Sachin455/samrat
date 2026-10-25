@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import txn_table, summary_cards, profile_card with context %}
+{% from "_macros.html" import txn_table, summary_cards, profile_card, documents_table with context %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 <section class="card">
@@ -19,6 +19,13 @@
     </div>
   </div>
   {{ txn_table(latest, empty="No transactions have been added to your account yet.") }}
+</section>
+<section class="card">
+  <div class="row between">
+    <h2>Documents{% if document_count %} ({{ document_count }}){% endif %}</h2>
+    {% if document_count > documents|length %}<a class="button secondary" href="{{ url_for('user.documents') }}">View all</a>{% endif %}
+  </div>
+  {{ documents_table(documents, empty="No documents have been shared with you yet.") }}
 </section>
 <section class="card">
   <div class="row between">

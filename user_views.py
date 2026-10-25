@@ -5,6 +5,7 @@ from functools import wraps
 
 from flask import (
     Blueprint,
+    abort,
     flash,
     g,
     redirect,
@@ -23,7 +24,7 @@ from core import (
     PROFILE_TABLES,
     TXN_ORDER,
     TXN_SELECT,
-    build_pdf,
+    statement_pdf,
     get_db,
     get_profile,
     hash_password,
@@ -31,6 +32,7 @@ from core import (
     now_iso,
     safe_next,
     save_profile,
+    send_document,
     txn_summary,
     validate_new_password,
     validate_profile,
@@ -224,7 +226,40 @@ def dashboard():
         "user/dashboard.html", latest=latest, summary=txn_summary("t.user_pk = ?", (user["id"],)),
         latest_count=LATEST_COUNT, profile=get_profile(user["id"]), fields=PROFILE_FIELDS,
         personal=get_profile(user["id"], "personal"), personal_fields=PERSONAL_FIELDS,
+        documents=get_db().execute(
+            "SELECT * FROM documents WHERE user_pk = ? ORDER BY id DESC LIMIT ?", (user["id"], LATEST_COUNT)
+        ).fetchall(),
+        document_count=get_db().execute(
+            "SELECT COUNT(*) FROM documents WHERE user_pk = ?", (user["id"],)).fetchone()[0],
     )
+
+
+@bp.route("/documents")
+@login_required
+def documents():
+    rows = get_db().execute(
+        "SELECT * FROM documents WHERE user_pk = ? ORDER BY id DESC", (current_user()["id"],)).fetchall()
+    return render_template("user/documents.html", documents=rows)
+
+
+def own_document_or_404(doc_id):
+    doc = get_db().execute(
+        "SELECT * FROM documents WHERE id = ? AND user_pk = ?", (doc_id, current_user()["id"])).fetchone()
+    if doc is None:
+        abort(404)
+    return doc
+
+
+@bp.route("/documents/<int:doc_id>")
+@login_required
+def download_document(doc_id):
+    return send_document(own_document_or_404(doc_id))
+
+
+@bp.route("/documents/<int:doc_id>/view")
+@login_required
+def view_document(doc_id):
+    return send_document(own_document_or_404(doc_id), inline=True)
 
 
 @bp.route("/transactions")
@@ -244,13 +279,6 @@ def transactions():
 def transactions_pdf():
     user = current_user()
     filters = date_filters()
-    where, params = user_txn_query(user["id"], filters)
-    rows = get_db().execute(f"{TXN_SELECT} WHERE {where} {TXN_ORDER}", params).fetchall()
-    period = ""
-    if filters["from"] or filters["to"]:
-        period = f" | Period: {filters['from'] or 'start'} to {filters['to'] or 'today'}"
-    subtitle = (f"{user['full_name']} | User ID: {user['user_id']}{period}"
-                f" | Generated: {datetime.now():%Y-%m-%d %H:%M}")
-    pdf = build_pdf("Transaction Statement", subtitle, rows)
+    pdf = statement_pdf(user["id"], user["user_id"], filters["from"], filters["to"])
     return send_file(pdf, as_attachment=True, download_name=f"statement_{user['user_id']}.pdf",
                      mimetype="application/pdf")

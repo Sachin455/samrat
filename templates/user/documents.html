@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% from "_macros.html" import documents_table with context %}
+{% block title %}Documents{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Documents</h1>
+  <p class="muted">Files shared with you by the administrator. Images and PDFs can be viewed in the browser; other files download.</p>
+  {{ documents_table(documents, empty="No documents have been shared with you yet.") }}
+</section>
+{% endblock %}

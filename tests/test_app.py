@@ -259,9 +259,28 @@ def test_withdrawal_deposit_columns_and_leading_zero_ids(client):
 def test_upload_errors(client):
     admin_login(client)
     assert b"Missing required column" in upload(client, xlsx([("x",)], header=("Name",))).data
-    assert b"valid .xlsx" in upload(client, io.BytesIO(b"not excel")).data
-    assert upload(client, io.BytesIO(b"a,b"), name="t.csv").status_code == 400
+    assert b"valid Excel or CSV" in upload(client, io.BytesIO(b"not excel")).data
+    assert b"Missing required column" in upload(client, io.BytesIO(b"a,b\n1,2\n"), name="t.csv").data
+    r = upload(client, io.BytesIO(b"%PDF-1.4"), name="statement.pdf")
+    assert r.status_code == 400 and "Upload documents" in r.get_data(as_text=True)
     assert upload(client, xlsx([]), target_user_id="123").status_code == 400
+
+
+def test_csv_import(client):
+    admin_login(client)
+    add_users(client, "100000001")
+    data = "User ID,Date,Description,Type,Amount\n100000001,05/10/2026,Fee,Credit,\"1,500.00\"\n".encode()
+    html = upload(client, io.BytesIO(data), name="txns.csv").get_data(as_text=True)
+    assert "Uploaded 1 transaction(s)" in html
+    html = client.get("/admin/users/100000001").get_data(as_text=True)
+    assert "2026-10-05" in html and "1,500.00" in html
+
+
+def test_blank_rows_above_header_keep_correct_row_numbers(client):
+    admin_login(client)
+    data = b"\n\nUser ID,Amount\n100000001,5\nbad,5\n"
+    html = upload(client, io.BytesIO(data), name="t.csv").get_data(as_text=True)
+    assert "<td>5</td><td>&#39;bad&#39; is not a 9-digit user ID</td>" in html
 
 
 def test_delete_upload(client):
@@ -455,6 +474,131 @@ def test_personal_profile_requires_onboarding_first(client):
     post(client, "/change-password", {"current_password": DEFAULT_USER_PASSWORD,
                                       "new_password": "mine123", "confirm": "mine123"})
     assert client.get("/me").headers["Location"].endswith("/profile")
+
+
+# --------------------------------------------------------------- documents
+
+
+def upload_docs(client, user_id, *files, title=""):
+    return post(client, "/admin/documents", {"user_id": user_id, "title": title,
+                                             "files": [(io.BytesIO(data), name) for name, data in files]},
+                content_type="multipart/form-data")
+
+
+def test_admin_uploads_documents_and_user_views_them(client, app):
+    admin_login(client)
+    add_users(client, "100000001", "100000002")
+    r = upload_docs(client, "100000001", ("receipt.png", b"\x89PNG fake"), ("audit.pdf", b"%PDF-1.4 fake"),
+                    ("letter.docx", b"PK word"), ("fees.xlsx", b"PK excel"))
+    assert r.headers["Location"].endswith("/admin/users/100000001")
+    html = client.get("/admin/users/100000001").get_data(as_text=True)
+    for name in ("receipt.png", "audit.pdf", "letter.docx", "fees.xlsx"):
+        assert name in html
+    assert upload_docs(client, "100000001", ("one.pdf", b"%PDF x"), title="Annual audit").status_code == 302
+    assert "Annual audit" in client.get("/admin/users/100000001").get_data(as_text=True)
+    post(client, "/admin/logout")
+
+    onboard_user(client, "100000001")
+    html = client.get("/dashboard").get_data(as_text=True)
+    assert "Documents (5)" in html and "Annual audit" in html
+    html = client.get("/documents").get_data(as_text=True)
+    assert all(n in html for n in ("receipt.png", "audit.pdf", "letter.docx", "fees.xlsx"))
+
+    ids = [int(i) for i in re.findall(r"/documents/(\d+)\"", html)]
+    by_name = {}
+    for doc_id in ids:
+        resp = client.get(f"/documents/{doc_id}")
+        by_name[re.search(r'filename="?([^";]+)', resp.headers["Content-Disposition"]).group(1)] = doc_id
+    png = client.get(f"/documents/{by_name['receipt.png']}/view")
+    assert png.data == b"\x89PNG fake" and png.mimetype == "image/png"
+    assert png.headers["Content-Disposition"].startswith("inline")
+    assert png.headers["X-Content-Type-Options"] == "nosniff"
+    docx = client.get(f"/documents/{by_name['letter.docx']}/view")  # not previewable: always a download
+    assert docx.headers["Content-Disposition"].startswith("attachment") and docx.data == b"PK word"
+    post(client, "/logout")
+
+    # another user can't open them
+    onboard_user(client, "100000002")
+    assert client.get(f"/documents/{by_name['receipt.png']}").status_code == 404
+    assert "receipt.png" not in client.get("/documents").get_data(as_text=True)
+
+
+def test_document_upload_rejects_bad_input(client):
+    admin_login(client)
+    add_users(client, "100000001")
+    r = upload_docs(client, "100000001", ("virus.exe", b"MZ"), ("page.html", b"<script>"), ("ok.pdf", b"%PDF"))
+    html = client.get(r.headers["Location"]).get_data(as_text=True)
+    assert "virus.exe" in html and "isn&#39;t allowed" in html and "page.html" in html
+    assert "Uploaded 1 document(s)" in html
+    assert "No user with ID 999999999" in client.get(
+        upload_docs(client, "999999999", ("a.pdf", b"x")).headers["Location"]).get_data(as_text=True)
+    assert "is empty" in client.get(
+        upload_docs(client, "100000001", ("empty.pdf", b"")).headers["Location"]).get_data(as_text=True)
+
+
+def test_deleting_document_or_user_removes_files(client, app):
+    admin_login(client)
+    add_users(client, "100000001")
+    upload_docs(client, "100000001", ("a.pdf", b"%PDF a"), ("b.jpg", b"jpg"))
+    folder = Path(app.config["DOCUMENTS_DIR"])
+    assert len(list(folder.iterdir())) == 2
+    html = client.get("/admin/users/100000001").get_data(as_text=True)
+    doc_id = re.search(r"/admin/documents/(\d+)/delete", html).group(1)
+    post(client, f"/admin/documents/{doc_id}/delete")
+    assert len(list(folder.iterdir())) == 1
+    post(client, "/admin/users/100000001/delete")
+    assert list(folder.iterdir()) == []
+
+
+# --------------------------------------------------------------------- pdf
+
+
+def pdf_pages_text(data):
+    """Decode a ReportLab PDF's page streams (ASCII85 + Flate) and return the text drawn on each page."""
+    import base64
+    import zlib
+
+    pages = []
+    for stream in re.findall(rb"stream\r?\n(.*?)endstream", data, re.S):
+        try:
+            raw = zlib.decompress(base64.a85decode(stream.strip(), adobe=True))
+        except Exception:
+            continue
+        if b" Tj" in raw or b"TJ" in raw:
+            pages.append(b" ".join(re.findall(rb"\((.*?)\) Tj", raw)).decode("latin-1"))
+    return pages
+
+
+def test_statement_pdf_layout(client):
+    admin_login(client)
+    add_users(client, "100000001")
+    rows = [("100000001", date(2026, 1, 1 + d % 28), f"Item {n}", "Debit" if n % 4 == 0 else "Credit", n, f"R{n}")
+            for n, d in enumerate(range(57), start=1)]
+    upload(client, xlsx(rows))
+    post(client, "/admin/logout")
+    onboard_user(client, "100000001", profile={"address": "Ward 4\nKathmandu"})
+
+    pages = pdf_pages_text(client.get("/transactions.pdf").data)
+    assert len(pages) == 3  # 57 rows at 25 per page
+    for i, text in enumerate(pages, start=1):
+        assert "Sunrise Academy" in text and "Ward 4, Kathmandu" in text
+        assert "Prepared by" in text and "Checked by" in text and "Approved by" in text
+        assert "Hari Thapa" in text and "Ram Sharma" in text and "Sita Karki" in text  # from the profile
+        assert f"Page {i} of 3" in text
+    counts = [len(re.findall(r"Item \d+", t)) for t in pages]
+    assert counts == [25, 25, 7]
+    assert "Carried forward" in pages[0] and "Net balance" in pages[2]
+
+    admin_pdf = client.get("/transactions.pdf?from=2026-01-01&to=2026-01-01").data
+    text = pdf_pages_text(admin_pdf)[0]
+    assert "Period 2026-01-01 to 2026-01-01" in text
+
+
+def test_admin_statement_pdf_without_profile(client):
+    admin_login(client)
+    add_users(client, "100000001")
+    text = pdf_pages_text(client.get("/admin/users/100000001/transactions.pdf").data)[0]
+    assert "Transaction Statement" in text and "Prepared by" in text and "No transactions." in text
 
 
 # ------------------------------------------------------------------ units

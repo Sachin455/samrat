@@ -53,3 +53,37 @@
   {% endfor %}
 </dl>
 {% endmacro %}
+
+{% macro documents_table(documents, admin=False, empty="No documents yet.") %}
+{% if documents %}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Document</th><th>File</th><th>Size</th><th>Added</th><th></th></tr></thead>
+  <tbody>
+  {% for d in documents %}
+    <tr>
+      <td><strong>{{ d.title }}</strong></td>
+      <td class="muted">{{ d.original_name }}</td>
+      <td class="nowrap">{{ d.size | filesize }}</td>
+      <td class="nowrap">{{ d.created_at[:10] }}</td>
+      <td class="num nowrap">
+        {% set prefix = 'admin.' if admin else 'user.' %}
+        {% if can_preview(d.original_name) %}<a href="{{ url_for(prefix ~ 'view_document', doc_id=d.id) }}" target="_blank" rel="noopener">View</a> ·{% endif %}
+        <a href="{{ url_for(prefix ~ 'download_document', doc_id=d.id) }}">Download</a>
+        {% if admin %}
+        <form method="post" action="{{ url_for('admin.delete_document', doc_id=d.id) }}" class="inline"
+              onsubmit="return confirm('Delete this document?')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="link danger">Delete</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="muted">{{ empty }}</p>
+{% endif %}
+{% endmacro %}

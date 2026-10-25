@@ -3,7 +3,7 @@
 import io
 import os
 import re
-from datetime import date, datetime
+from datetime import date
 from functools import wraps
 
 from flask import (
@@ -27,11 +27,13 @@ from core import (
     PROFILE_FIELDS,
     TXN_ORDER,
     TXN_SELECT,
+    TRANSACTION_FILE_TYPES,
     UploadError,
-    build_pdf,
+    statement_pdf,
     cell_text,
     cents_to_input,
     create_users,
+    delete_document_files,
     get_db,
     get_profile,
     get_setting,
@@ -44,7 +46,9 @@ from core import (
     parse_workbook,
     record_amount_and_type,
     safe_next,
+    save_document,
     save_profile,
+    send_document,
     set_setting,
     txn_summary,
     validate_new_password,
@@ -255,6 +259,8 @@ def user_detail(user_id):
         "admin/user_detail.html", user=user, rows=rows, summary=txn_summary("t.user_pk = ?", (user["id"],)),
         today=date.today().isoformat(), profile=get_profile(user["id"]), fields=PROFILE_FIELDS,
         personal=get_profile(user["id"], "personal"), personal_fields=PERSONAL_FIELDS,
+        documents=get_db().execute(
+            "SELECT * FROM documents WHERE user_pk = ? ORDER BY id DESC", (user["id"],)).fetchall(),
     )
 
 
@@ -281,11 +287,7 @@ def edit_profile(user_id):
 @admin_required
 def user_pdf(user_id):
     user = get_user_or_404(user_id)
-    rows = get_db().execute(f"{TXN_SELECT} WHERE t.user_pk = ? {TXN_ORDER}", (user["id"],)).fetchall()
-    profile = get_profile(user["id"])
-    name = f"{profile['full_name']} | " if profile else ""
-    subtitle = f"{name}User ID: {user['user_id']} | Generated: {datetime.now():%Y-%m-%d %H:%M}"
-    return send_file(build_pdf("Transaction Statement", subtitle, rows), as_attachment=True,
+    return send_file(statement_pdf(user["id"], user["user_id"]), as_attachment=True,
                      download_name=f"statement_{user['user_id']}.pdf", mimetype="application/pdf")
 
 
@@ -308,10 +310,80 @@ def reset_password(user_id):
 def delete_user(user_id):
     user = get_user_or_404(user_id)
     db = get_db()
+    stored = [r["stored_name"] for r in db.execute("SELECT stored_name FROM documents WHERE user_pk = ?",
+                                                   (user["id"],))]
     db.execute("DELETE FROM users WHERE id = ?", (user["id"],))
     db.commit()
-    flash(f"User {user_id} and all their transactions were deleted.", "success")
+    delete_document_files(stored)
+    flash(f"User {user_id} and all their transactions and documents were deleted.", "success")
     return redirect(url_for("admin.users"))
+
+
+# ------------------------------------------------------------- documents
+
+
+def get_document_or_404(doc_id):
+    doc = get_db().execute(
+        "SELECT d.*, u.user_id FROM documents d JOIN users u ON u.id = d.user_pk WHERE d.id = ?", (doc_id,)
+    ).fetchone()
+    if doc is None:
+        abort(404)
+    return doc
+
+
+@bp.route("/documents", methods=["POST"])
+@admin_required
+def upload_documents():
+    target_raw = request.form.get("user_id", "").strip()
+    target = normalize_user_id(target_raw)
+    files = [f for f in request.files.getlist("files") if f and f.filename]
+    db = get_db()
+    user = db.execute("SELECT id FROM users WHERE user_id = ?", (target,)).fetchone() if target else None
+    if not target:
+        flash("Enter the 9-digit user ID the documents are for.", "error")
+    elif user is None:
+        flash(f"No user with ID {target}. Add the user first.", "error")
+    elif not files:
+        flash("Choose at least one file to upload.", "error")
+    else:
+        title = request.form.get("title", "").strip()
+        saved, problems = [], []
+        for f in files:
+            try:
+                saved.append(save_document(user["id"], f, title if len(files) == 1 else ""))
+            except UploadError as exc:
+                problems.append(str(exc))
+        db.commit()
+        for problem in problems:
+            flash(problem, "error")
+        if saved:
+            flash(f"Uploaded {len(saved)} document(s) to {target}: " + ", ".join(saved), "success")
+            return redirect(url_for("admin.user_detail", user_id=target))
+    return redirect(url_for("admin.upload", doc_user=target_raw))
+
+
+@bp.route("/documents/<int:doc_id>")
+@admin_required
+def download_document(doc_id):
+    return send_document(get_document_or_404(doc_id))
+
+
+@bp.route("/documents/<int:doc_id>/view")
+@admin_required
+def view_document(doc_id):
+    return send_document(get_document_or_404(doc_id), inline=True)
+
+
+@bp.route("/documents/<int:doc_id>/delete", methods=["POST"])
+@admin_required
+def delete_document(doc_id):
+    doc = get_document_or_404(doc_id)
+    db = get_db()
+    db.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
+    db.commit()
+    delete_document_files([doc["stored_name"]])
+    flash(f"Document “{doc['title']}” deleted.", "success")
+    return redirect(url_for("admin.user_detail", user_id=doc["user_id"]))
 
 
 # ---------------------------------------------------------- transactions
@@ -398,7 +470,8 @@ def delete_transaction(txn_id):
 @admin_required
 def upload():
     if request.method == "GET":
-        return render_template("admin/upload.html", result=None, form={"create_missing": "1"})
+        return render_template("admin/upload.html", result=None, form={"create_missing": "1"},
+                               doc_user=request.args.get("doc_user", ""))
 
     form = request.form
     target_raw = form.get("target_user_id", "").strip()
@@ -407,17 +480,18 @@ def upload():
 
     def fail(message):
         flash(message, "error")
-        return render_template("admin/upload.html", result=None, form=form), 400
+        return render_template("admin/upload.html", result=None, form=form, doc_user=""), 400
 
     if target_raw and not target:
         return fail("User ID must be exactly 9 digits.")
     file = request.files.get("file")
     if not file or not file.filename:
-        return fail("Please choose an Excel file to upload.")
-    if not file.filename.lower().endswith((".xlsx", ".xlsm")):
-        return fail("Only Excel .xlsx files are supported.")
+        return fail("Please choose an Excel or CSV file to upload.")
+    if not file.filename.lower().endswith(TRANSACTION_FILE_TYPES):
+        return fail("Transactions can only be imported from Excel (.xlsx, .xls) or CSV files. "
+                    "To attach other files (PDF, Word, images…) use “Upload documents” below.")
     try:
-        records = parse_workbook(io.BytesIO(file.read()), need_user_column=target is None)
+        records = parse_workbook(file.filename, file.read(), need_user_column=target is None)
     except UploadError as exc:
         return fail(str(exc))
 
@@ -485,7 +559,7 @@ def upload():
         flash("No transactions were uploaded. Fix the problems below and try again.", "error")
 
     return render_template(
-        "admin/upload.html", form=form,
+        "admin/upload.html", form=form, doc_user="",
         result={"delivered": sorted(delivered.items()), "skipped": skipped, "total": len(records),
                 "created": created},
     )
